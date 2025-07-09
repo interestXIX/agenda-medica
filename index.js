@@ -36,28 +36,31 @@ db.getConnection((err, connection) => {
 app.get('/api/agenda', (req, res) => {
   const sql = `
     SELECT 
-      A.IDAGENDA AS id,
-      PF.NOMEPESSOA AS professionalName,
-      E.DESCESPEC AS specialty,
-      P.DESCRPROC AS title,
-      DATE_FORMAT(A.DATAABERT, '%Y-%m-%d') AS date,
-      DATE_FORMAT(A.DATAABERT, '%H:%i') AS time,
-      CASE 
-        WHEN P.CODPROCED LIKE 'CONS%' THEN 'consulta'
-        WHEN P.CODPROCED LIKE 'CIRU%' THEN 'cirurgia'
-        ELSE 'administrativo'
-      END AS type,
-      A.ID_PROFISSIO AS professionalId,
-      A.ID_PROCED AS procedureId,
-      A.DESCRCOMP AS description,
-      A.SITUAGEN AS status
-    FROM AGENDA A
-    JOIN PROFISSIONAL PR ON A.ID_PROFISSIO = PR.IDPROFISSIO
-    JOIN PESSOAFIS PF ON PR.ID_PESSOAFIS = PF.IDPESSOAFIS
-    JOIN PROCEDIMENTO P ON A.ID_PROCED = P.IDPROCED
-    LEFT JOIN ESPECIALIDADE E ON PR.ID_CONSEPROFI = E.IDESPEC
-    WHERE A.SITUAGEN = '1'
-    ORDER BY A.DATAABERT
+  A.IDAGENDA AS id,
+  PF.NOMEPESSOA AS professionalName,
+  COALESCE(GROUP_CONCAT(DISTINCT E.DESCESPEC SEPARATOR ', '), 'Sem Especialidade') AS specialty,
+  P.DESCRPROC AS title,
+  DATE_FORMAT(A.DATAABERT, '%Y-%m-%d') AS date,
+  DATE_FORMAT(A.DATAABERT, '%H:%i') AS time,
+  CASE 
+    WHEN P.CODPROCED LIKE 'CONS%' THEN 'consulta'
+    WHEN P.CODPROCED LIKE 'CIRU%' THEN 'cirurgia'
+    ELSE 'consulta'
+  END AS type,
+  A.ID_PROFISSIO AS professionalId,
+  A.ID_PROCED AS procedureId,
+  A.DESCRCOMP AS description,
+  A.SITUAGEN AS status
+FROM AGENDA A
+JOIN PROFISSIONAL PR ON A.ID_PROFISSIO = PR.IDPROFISSIO
+JOIN PESSOAFIS PF ON PR.ID_PESSOAFIS = PF.IDPESSOAFIS
+JOIN PROCEDIMENTO P ON A.ID_PROCED = P.IDPROCED
+LEFT JOIN PROFI_ESPEC PE ON PE.ID_PROFISSIO = PR.IDPROFISSIO
+LEFT JOIN ESPECIALIDADE E ON PE.ID_ESPEC = E.IDESPEC
+WHERE A.SITUAGEN = '1'
+GROUP BY A.IDAGENDA
+ORDER BY A.DATAABERT
+
   `;
 
   db.query(sql, (err, results) => {
@@ -144,15 +147,19 @@ app.delete('/api/agenda/:id', (req, res) => {
 app.get('/api/profissionais', (req, res) => {
   const sql = `
     SELECT 
-      PR.IDPROFISSIO AS id,
-      PF.NOMEPESSOA AS nome,
-      E.DESCESPEC AS especialidade
-    FROM PROFISSIONAL PR
-    JOIN PESSOAFIS PF ON PR.ID_PESSOAFIS = PF.IDPESSOAFIS
-    JOIN ESPECIALIDADE E ON PR.ID_CONSEPROFI = E.IDESPEC
-    WHERE PR.STATUSPROFI = '1'  // Considerando '1' como ativo
+  PR.IDPROFISSIO AS id,
+  PF.NOMEPESSOA AS nome,
+  COALESCE(GROUP_CONCAT(E.DESCESPEC SEPARATOR ', '), 'Sem Especialidade') AS especialidade
+FROM PROFISSIONAL PR
+JOIN PESSOAFIS PF ON PR.ID_PESSOAFIS = PF.IDPESSOAFIS
+LEFT JOIN PROFI_ESPEC PE ON PE.ID_PROFISSIO = PR.IDPROFISSIO
+LEFT JOIN ESPECIALIDADE E ON PE.ID_ESPEC = E.IDESPEC
+WHERE PR.STATUSPROFI = '1'
+GROUP BY PR.IDPROFISSIO, PF.NOMEPESSOA
+ORDER BY PF.NOMEPESSOA
+
   `;
-  
+
   db.query(sql, (err, results) => {
     if (err) {
       console.error('Erro ao buscar profissionais:', err);
@@ -161,6 +168,8 @@ app.get('/api/profissionais', (req, res) => {
     res.json(results);
   });
 });
+
+
 
 // ➜ GET PROCEDIMENTOS
 app.get('/api/procedimentos', (req, res) => {
