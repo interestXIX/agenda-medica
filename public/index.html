@@ -788,7 +788,7 @@
           <i class="fas fa-user-md"></i>
           <div class="event-detail-content">
             <div class="event-detail-title">Profissional</div>
-            <div class="event-detail-value" id="modalProfessional">Dra. Eliza</div>
+            <div class="event-detail-value" id="modalProfessional"></div>
           </div>
         </div>
         
@@ -796,7 +796,7 @@
           <i class="fas fa-stethoscope"></i>
           <div class="event-detail-content">
             <div class="event-detail-title">Especialidade</div>
-            <div class="event-detail-value" id="modalSpecialty">Acupuntura</div>
+            <div class="event-detail-value" id="modalSpecialty"></div>
           </div>
         </div>
         
@@ -804,7 +804,7 @@
           <i class="fas fa-calendar-day"></i>
           <div class="event-detail-content">
             <div class="event-detail-title">Data</div>
-            <div class="event-detail-value" id="modalDate">08/03/2025</div>
+            <div class="event-detail-value" id="modalDate"></div>
           </div>
         </div>
         
@@ -812,7 +812,7 @@
           <i class="fas fa-clock"></i>
           <div class="event-detail-content">
             <div class="event-detail-title">Horário</div>
-            <div class="event-detail-value" id="modalTime">09:00</div>
+            <div class="event-detail-value" id="modalTime"></div>
           </div>
         </div>
         
@@ -820,16 +820,16 @@
           <i class="fas fa-tag"></i>
           <div class="event-detail-content">
             <div class="event-detail-title">Tipo</div>
-            <div class="event-detail-value" id="modalType">Consulta</div>
+            <div class="event-detail-value" id="modalType"></div>
           </div>
         </div>
       </div>
       <div class="modal-footer">
-        <button class="btn btn-secondary">
-          <i class="fas fa-edit"></i> Editar
-        </button>
-        <button class="btn btn-primary">
-          <i class="fas fa-check"></i> Confirmar
+        <button id="editEvent" class="btn btn-secondary">
+  <i class="fas fa-edit"></i> Editar
+</button>
+        <button class="btn btn-primary" id="confirmEvent">
+          <i class="fas fa-check"></i> Confirmar 
         </button>
          <button class="btn btn-danger" id="deleteEventBtn">
     <i class="fas fa-trash"></i> Excluir
@@ -900,7 +900,7 @@
     </div>
   </div>
 </div>
-  
+</body>
   <script>
   // Variáveis globais
 let currentDate = new Date();
@@ -1049,7 +1049,8 @@ function showEventDetails(eventId) {
   const event = events.find(e => e.id == eventId);
   if (!event) return;
 
-  currentEventId = event.id; // Salva o ID para uso no delete
+  eventModal.dataset.id = eventId;  // Salva o ID para uso no delete
+  currentEventId = eventId;
 
   document.getElementById('modalEventTitle').textContent = event.title;
   document.getElementById('modalProfessional').textContent = event.professional;
@@ -1121,48 +1122,68 @@ function filterEvents() {
 
 // Salvar novo evento
 async function saveEvent() {
-  const newEvent = {
-    title: document.getElementById('eventTitle').value.trim(),
-    professional: document.getElementById('eventProfessional').value,
-    specialty: document.getElementById('eventSpecialty').value.trim(),
-    date: document.getElementById('eventDate').value,
-    time: document.getElementById('eventTime').value,
-    type: document.getElementById('eventType').value
-  };
+  const idEditing = createEventModal.dataset.editingId || null;
 
-  // Validação
-  if (!newEvent.title || !newEvent.professional || !newEvent.date || !newEvent.time || !newEvent.type) {
+  const title = document.getElementById('eventTitle').value.trim();
+  const professionalId = document.getElementById('eventProfessional').value;
+  const procedureId = document.getElementById('eventProcedimento').value;
+  const date = document.getElementById('eventDate').value;
+  const time = document.getElementById('eventTime').value;
+  const description = title;
+
+  if (!title || !professionalId || !procedureId || !date || !time) {
     alert('Por favor, preencha todos os campos obrigatórios!');
     return;
   }
 
   try {
-    const response = await fetch('/api/agenda', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify(newEvent)
+    const body = {
+      title,
+      professionalId: parseInt(professionalId),
+      procedureId: parseInt(procedureId),
+      date,
+      time,
+      description
+    };
+
+    const url = idEditing ? `/api/agenda/${idEditing}` : `/api/agenda`;
+    const method = idEditing ? 'PUT' : 'POST';
+
+    const response = await fetch(url, {
+      method: method,
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body)
     });
 
     if (!response.ok) {
-      throw new Error(`Erro HTTP: ${response.status}`);
+      const errorData = await response.json();
+      throw new Error(errorData.error || 'Erro ao salvar agendamento');
     }
 
     const savedEvent = await response.json();
-    events.push(savedEvent);
+
+    if (idEditing) {
+      const index = events.findIndex(e => e.id == idEditing);
+      if (index !== -1) events[index] = savedEvent;
+    } else {
+      events.push(savedEvent);
+    }
+
     filteredEvents = [...events];
     populateFilters();
     renderCalendar();
+
     createEventModal.style.display = 'none';
     eventForm.reset();
-    alert('Evento criado com sucesso!');
-    
+    delete createEventModal.dataset.editingId;
+
+    alert(idEditing ? 'Agendamento editado com sucesso!' : 'Agendamento criado com sucesso!');
   } catch (error) {
-    console.error('Erro ao salvar evento:', error);
-    alert('Erro ao salvar evento. Verifique a conexão com o servidor.');
+    console.error('Erro ao salvar agendamento:', error);
+    alert(`Erro: ${error.message}`);
   }
 }
+
 
   async function deleteEvent() {
   if (!currentEventId) {
@@ -1205,49 +1226,86 @@ document.addEventListener('DOMContentLoaded', () => {
     currentDate.setMonth(currentDate.getMonth() - 1);
     renderCalendar();
   });
-  
-  document.getElementById('eventProfessional').addEventListener('change', function() {
-  const selectedOption = this.selectedOptions[0];
-  if (selectedOption) {
-    const specialty = selectedOption.textContent.split(' - ')[1] || '';
-    document.getElementById('eventSpecialty').value = specialty;
-  }
-});
 
   nextMonthBtn.addEventListener('click', () => {
     currentDate.setMonth(currentDate.getMonth() + 1);
     renderCalendar();
   });
-  
+
   todayBtn.addEventListener('click', () => {
     currentDate = new Date();
     renderCalendar();
   });
-  
+
   // Modal de eventos
   closeModal.addEventListener('click', () => {
     eventModal.style.display = 'none';
   });
+
   document.getElementById('deleteEventBtn').addEventListener('click', deleteEvent);
+
+  // ✅ BOTÃO EDITAR DENTRO DO DOMContentLoaded
+  const editEventBtn = document.getElementById('editEvent');
+  if (editEventBtn) {
+    editEventBtn.addEventListener('click', () => {
+      const eventId = eventModal.dataset.id;
+      const event = events.find(e => e.id == eventId);
+      if (!event) return;
+
+      // Preenche modal de criação com os dados
+      document.getElementById('eventTitle').value = event.title;
+document.getElementById('eventProfessional').value = event.professionalId;
+document.getElementById('eventProfessional').dispatchEvent(new Event('change'));
+document.getElementById('eventProcedimento').value = event.procedureId;
+document.getElementById('eventDate').value = event.date;
+document.getElementById('eventTime').value = event.time;
+
+// 2️⃣ BLOQUEIA campos
+document.getElementById('eventTitle').disabled = true;
+document.getElementById('eventProfessional').disabled = true;
+document.getElementById('eventProcedimento').disabled = true;
+document.getElementById('eventSpecialty').disabled = true;
+
+// 3️⃣ Abre o modal
+eventModal.style.display = 'none';
+createEventModal.style.display = 'flex';
+
+// Marca edição
+createEventModal.dataset.editingId = eventId;
+    });
+  }
 
   // Modal de criação
   newEventBtn.addEventListener('click', () => {
     createEventModal.style.display = 'flex';
+    document.getElementById('eventTitle').disabled = false;
+    document.getElementById('eventProfessional').disabled = false;
+    document.getElementById('eventProcedimento').disabled = false;
+    document.getElementById('eventSpecialty').disabled = false;
   });
   
   closeCreateModal.addEventListener('click', () => {
     createEventModal.style.display = 'none';
   });
-  
+
   cancelCreateBtn.addEventListener('click', () => {
     createEventModal.style.display = 'none';
   });
-  
+
   saveEventBtn.addEventListener('click', saveEvent);
-  
+
   // Filtros
   document.getElementById('filterButton').addEventListener('click', filterEvents);
-  
+
+  // Preencher especialidade automática
+  document.getElementById('eventProfessional').addEventListener('change', function() {
+    const selectedOption = this.selectedOptions[0];
+    if (selectedOption) {
+      const specialty = selectedOption.textContent.split(' - ')[1] || '';
+      document.getElementById('eventSpecialty').value = specialty;
+    }
+  });
+
   // Fechar modal clicando fora
   window.addEventListener('click', (e) => {
     if (e.target === eventModal) {
@@ -1258,6 +1316,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   });
 });
+
     // Função para carregar profissionais no select
 async function loadEvents() {
   try {
@@ -1288,53 +1347,79 @@ async function saveEvent() {
   const time = document.getElementById('eventTime').value;
   const description = document.getElementById('eventDescription')?.value || title;
 
+  const editingId = createEventModal.dataset.editingId;
+
   // Validação
-  if (!title || !professionalId || !procedureId || !date || !time) {
-    alert('Por favor, preencha todos os campos obrigatórios!');
+  if (!date || !time) {
+    alert('Preencha Data e Horário!');
     return;
   }
 
   try {
-    const response = await fetch('/api/agenda', { // Endpoint corrigido
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        title,
-        professionalId: parseInt(professionalId),
-        procedureId: parseInt(procedureId),
-        date,
-        time,
-        description
-      })
-    });
+    let response;
+
+    if (editingId) {
+      // 🚀 Edição
+      response = await fetch(`/api/agenda/${editingId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ date, time })
+      });
+    } else {
+      // 🚀 Novo
+      if (!title || !professionalId || !procedureId) {
+        alert('Preencha todos os campos obrigatórios!');
+        return;
+      }
+
+      response = await fetch('/api/agenda', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          title,
+          professionalId: parseInt(professionalId),
+          procedureId: parseInt(procedureId),
+          date,
+          time,
+          description
+        })
+      });
+    }
 
     if (!response.ok) {
       const errorData = await response.json();
-      throw new Error(errorData.error || 'Erro ao salvar agendamento');
+      throw new Error(errorData.error || 'Erro na operação');
     }
 
-    const savedEvent = await response.json();
-    
-    // Atualiza a interface
-    events.push({
-      ...savedEvent,
-      professional: document.getElementById('eventProfessional').selectedOptions[0].text.split(' - ')[0]
-    });
-    
+    // Atualiza lista local
+    if (editingId) {
+      const updatedEvent = await response.json();
+      events = events.map(e =>
+        e.id == editingId ? { ...e, date: updatedEvent.date, time: updatedEvent.time } : e
+      );
+    } else {
+      const savedEvent = await response.json();
+      events.push({
+        ...savedEvent,
+        professional: document.getElementById('eventProfessional').selectedOptions[0].text.split(' - ')[0]
+      });
+    }
+
     filteredEvents = [...events];
     populateFilters();
     renderCalendar();
-    
-    // Fecha o modal
-    document.getElementById('createEventModal').style.display = 'none';
-    document.getElementById('eventForm').reset();
-    
-    alert('Agendamento criado com sucesso!');
+
+    createEventModal.style.display = 'none';
+    createEventModal.dataset.editingId = ''; // Limpa
+    eventForm.reset();
+
+    alert(editingId ? 'Agendamento atualizado!' : 'Novo agendamento criado!');
   } catch (error) {
-    console.error('Erro ao salvar agendamento:', error);
+    console.error('Erro:', error);
     alert(`Erro: ${error.message}`);
   }
 }
+
 
 async function loadFormData() {
   try {
@@ -1372,8 +1457,13 @@ async function loadFormData() {
   }
 }
 
+  document.getElementById('confirmEvent').addEventListener('click', () => {
+  alert('Consulta confirmada!');
+  eventModal.style.display = 'none';
+});
+
 // Adicione este listener para carregar dados quando o modal abre
 document.querySelector('.new-event-btn').addEventListener('click', loadFormData);
   </script>
-</body>
+
 </html>
