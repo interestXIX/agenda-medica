@@ -35,32 +35,31 @@ db.getConnection((err, connection) => {
 // ➜ GET AGENDA (Endpoint atualizado)
 app.get('/api/agenda', (req, res) => {
   const sql = `
-    SELECT 
-  A.IDAGENDA AS id,
-  PF.NOMEPESSOA AS professionalName,
-  COALESCE(GROUP_CONCAT(DISTINCT E.DESCESPEC SEPARATOR ', '), 'Sem Especialidade') AS specialty,
-  P.DESCRPROC AS title,
-  DATE_FORMAT(A.DATAABERT, '%Y-%m-%d') AS date,
-  DATE_FORMAT(A.DATAABERT, '%H:%i') AS time,
-  CASE 
-    WHEN P.CODPROCED LIKE 'CONS%' THEN 'consulta'
-    WHEN P.CODPROCED LIKE 'CIRU%' THEN 'cirurgia'
-    ELSE 'consulta'
-  END AS type,
-  A.ID_PROFISSIO AS professionalId,
-  A.ID_PROCED AS procedureId,
-  A.DESCRCOMP AS description,
-  A.SITUAGEN AS status
-FROM AGENDA A
+   SELECT 
+      A.IDAGENDA AS id,
+      PF.NOMEPESSOA AS professionalName,
+      E.DESCESPEC AS specialty,
+      P.DESCRPROC AS title,
+      DATE_FORMAT(A.DATAABERT, '%Y-%m-%d') AS date,
+      DATE_FORMAT(A.DATAABERT, '%H:%i') AS time,
+      CASE 
+        WHEN P.CODPROCED LIKE 'CONS%' THEN 'consulta'
+        WHEN P.CODPROCED LIKE 'CIRU%' THEN 'cirurgia'
+        WHEN P.DESCRPROC LIKE '%cirurg%' THEN 'cirurgia'
+        ELSE 'consulta'
+      END AS type,
+      A.ID_PROFISSIO AS professionalId,
+      A.ID_PROCED AS procedureId,
+      A.DESCRCOMP AS description,
+      A.SITUAGEN AS status
+    FROM AGENDA A
 JOIN PROFISSIONAL PR ON A.ID_PROFISSIO = PR.IDPROFISSIO
 JOIN PESSOAFIS PF ON PR.ID_PESSOAFIS = PF.IDPESSOAFIS
 JOIN PROCEDIMENTO P ON A.ID_PROCED = P.IDPROCED
 LEFT JOIN PROFI_ESPEC PE ON PE.ID_PROFISSIO = PR.IDPROFISSIO
 LEFT JOIN ESPECIALIDADE E ON PE.ID_ESPEC = E.IDESPEC
-WHERE A.SITUAGEN = '1'
-GROUP BY A.IDAGENDA
-ORDER BY A.DATAABERT
-
+    WHERE A.SITUAGEN = '1'
+    ORDER BY A.DATAABERT
   `;
 
   db.query(sql, (err, results) => {
@@ -119,6 +118,32 @@ app.post('/api/agenda', (req, res) => {
       res.status(201).json(newAppointment);
     }
   );
+});
+
+  app.put('/api/agenda/:id', (req, res) => {
+  const { id } = req.params;
+  const { date, time } = req.body;
+
+  if (!id || !date || !time) {
+    return res.status(400).json({ error: 'Campos obrigatórios faltando' });
+  }
+
+  const sql = `
+    UPDATE AGENDA
+    SET DATAABERT = ?
+    WHERE IDAGENDA = ?
+  `;
+
+  const formattedDateTime = `${date} ${time}:00`;
+
+  db.query(sql, [formattedDateTime, id], (err, result) => {
+    if (err) {
+      console.error('Erro ao atualizar agendamento:', err);
+      return res.status(500).json({ error: 'Erro ao atualizar agendamento.' });
+    }
+
+    res.json({ id, date, time });
+  });
 });
 
 // ➜ DELETE AGENDA
